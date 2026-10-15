@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ask the Audience</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap">
+<style>
+:root{--night:#060a26;--om:#35b6e8;--gold:#f7bd36;--lock:#ff8a1f;--ink:#f2f6ff;--muted:#9aa6d6;--line:#7f8fd8;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(ellipse 90% 60% at 50% 20%,#1b2a8c,transparent 70%),var(--night);color:var(--ink);
+  font-family:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;font-size:18px;
+  padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+main{max-width:640px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+.logo{font-family:"Bungee","Arial Black",sans-serif;line-height:1}
+.logo small{display:block;font-size:13px;letter-spacing:.06em;margin-bottom:4px}
+.logo b{font-weight:400;font-size:clamp(28px,9vw,44px);color:var(--gold);text-shadow:0 3px 0 #a5640b}
+.logo b i{font-style:normal;color:var(--om)}
+h1{margin:0;font-family:"Bungee",sans-serif;font-weight:400;font-size:20px;color:var(--om);letter-spacing:.04em}
+.q{font-size:clamp(21px,5.6vw,28px);font-weight:700;margin:0;line-height:1.2}
+.wait{color:var(--muted);font-size:21px;font-weight:600;margin:24px 0}
+.opts{display:grid;gap:12px;width:100%}
+.opts.photos{grid-template-columns:1fr 1fr}
+.opt{display:flex;align-items:center;gap:12px;padding:18px 20px;border-radius:16px;border:3px solid var(--line);background:linear-gradient(180deg,#121b6e,#060b35);
+  color:var(--ink);font:inherit;font-size:21px;font-weight:700;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent}
+.opt .L{font-family:"Bungee",sans-serif;color:var(--gold);font-size:24px;flex:none}
+.opt.photo{flex-direction:column;align-items:stretch;padding:6px;gap:6px}
+.opt.photo img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;display:block}
+.opt.photo .L{text-align:center}
+.opt.mine{border-color:#ffd49a;background:linear-gradient(180deg,#ffa53a,#e06d00);color:#1d0f00}
+.opt.mine .L{color:#fff}
+.opt:disabled{opacity:.25}
+.status{font-weight:700;color:var(--om);min-height:26px;margin:0}
+.credit{color:var(--muted);font-size:12px;margin-top:20px}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><small>WHO WANTS TO BE A</small><b>MARSEILLAIS<i>?</i></b></div>
+  <h1>ASK THE AUDIENCE</h1>
+  <div id="body" style="width:100%;display:flex;flex-direction:column;gap:14px;align-items:center"><p class="wait">Connecting…</p></div>
+  <p class="credit">Calanque photos: Wikimedia Commons</p>
+</main>
+<script>
+const TOPIC = 'wwtbm-rb-d47f773381d5';
+const LET = ['A', 'B', 'C', 'D'];
+const IMG = { envau: 'img/envau.jpg', sormiou: 'img/sormiou.jpg', sugiton: 'img/sugiton.jpg', morgiou: 'img/morgiou.jpg' };
+let voter = null;
+try { voter = localStorage.getItem('wwtbm-voter'); } catch (e) {}
+if (!voter) { voter = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem('wwtbm-voter', voter); } catch (e) {} }
+let poll = null, mine = {}, busy = false, err = '';
+try { mine = JSON.parse(sessionStorage.getItem('wwtbm-mine') || '{}'); } catch (e) {}
+
+function setPoll(p) { if (!p || typeof p !== 'object') return; poll = p; err = ''; render(); }
+function connect() {
+  const es = new EventSource(`https://ntfy.sh/${TOPIC}-poll/sse?since=latest`);
+  es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.event === 'message') setPoll(JSON.parse(m.message)); } catch (x) {} };
+  es.onopen = () => { if (!poll) render(); };
+  es.onerror = () => { if (!poll) render('Reconnecting…'); };
+}
+function render(msg) {
+  const body = document.getElementById('body'); body.innerHTML = '';
+  const wait = t => { const p = document.createElement('p'); p.className = 'wait'; p.textContent = t; body.appendChild(p); };
+  if (msg) return wait(msg);
+  if (!poll || !poll.open || !Array.isArray(poll.opts)) return wait(poll && poll.pid ? 'Voting is closed. Eyes on the big screen!' : 'Waiting for the host to open the vote…');
+  const q = document.createElement('p'); q.className = 'q'; q.textContent = String(poll.q || ''); body.appendChild(q);
+  const grid = document.createElement('div'); grid.className = 'opts' + (poll.photo ? ' photos' : '');
+  const removed = Array.isArray(poll.removed) ? poll.removed : [];
+  const my = mine[poll.pid];
+  poll.opts.slice(0, 4).forEach((o, i) => {
+    const b = document.createElement('button'); b.className = 'opt' + (poll.photo ? ' photo' : '') + (my === i ? ' mine' : '');
+    b.disabled = removed.includes(i) || busy;
+    const l = document.createElement('span'); l.className = 'L'; l.textContent = LET[i];
+    if (poll.photo && IMG[o]) { const img = new Image(); img.src = IMG[o]; img.alt = 'Photo ' + LET[i]; b.append(img, l); }
+    else { const t = document.createElement('span'); t.textContent = String(o); b.append(l, t); }
+    b.onclick = () => vote(i);
+    grid.appendChild(b);
+  });
+  body.appendChild(grid);
+  const st = document.createElement('p'); st.className = 'status';
+  st.textContent = err || (busy ? 'Sending…' : my !== undefined ? `You voted ${LET[my]}. You can change your vote until the vote closes.` : 'Tap your answer.');
+  body.appendChild(st);
+}
+async function vote(i) {
+  if (!poll || !poll.open || busy) return;
+  busy = true; err = ''; render();
+  try {
+    const r = await fetch(`https://ntfy.sh/${TOPIC}-votes`, { method: 'POST', body: JSON.stringify({ pid: poll.pid, v: voter, c: i }) });
+    if (!r.ok) throw new Error(r.status);
+    mine[poll.pid] = i; try { sessionStorage.setItem('wwtbm-mine', JSON.stringify(mine)); } catch (e) {}
+  } catch (e) { err = 'Your vote did not go through. Tap again.'; }
+  busy = false; render();
+}
+connect();
+</script>
+</body>
+</html>
