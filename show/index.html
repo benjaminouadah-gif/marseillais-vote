@@ -503,6 +503,7 @@ kbd{border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;paddi
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const VOTE_URL = 'https://benjaminouadah-gif.github.io/marseillais-vote/';
+const SHOW_URL = 'https://benjaminouadah-gif.github.io/marseillais-vote/show/';
 /* Votes travel through ntfy.sh (no login). Works when the game runs from the file on the laptop; Claude's viewer blocks it. */
 const TOPIC = 'wwtbm-rb-d47f773381d5';
 function ntfyPost(topic, obj) {
@@ -898,7 +899,7 @@ $('llCrowd').onclick = async () => {
   const q = Q[S.qi];
   try {
     await ntfyPost(TOPIC + '-poll', { pid, open: true, qi: S.qi, q: q.q.replace(/<[^>]+>/g, ''), opts: q.photo || q.a, photo: !!q.photo, removed: S.removed });
-  } catch (e) { $('pollState').textContent = 'Phone voting only works when the game runs from the file on the laptop. Count hands with the buttons below.'; return; }
+  } catch (e) { $('pollState').textContent = 'Phone votes cannot reach this copy of the game (it runs inside Claude). For live phone voting, run the show from ' + SHOW_URL + ' . For now, count hands with the buttons below.'; return; }
   pollPid = pid;
   const voters = {};
   const es = new EventSource(`https://ntfy.sh/${TOPIC}-votes/sse?since=${since}`);
@@ -1001,7 +1002,7 @@ $('skipToBox').onclick = () => { ac(); show('sBox'); };
 $('skipToGift').onclick = () => { ac(); show('sGift'); };
 $('openSound').onclick = openSound; $('soundBtn').onclick = openSound;
 $('openVoteInfo').onclick = () => {
-  modal(`<h4>Audience voting link</h4><p>Share this with the audience before the show. When Roberta asks the audience, everyone votes from their phone and the results appear live on the big screen. Anyone can vote, no account needed. Live results show when the game runs from the file on the laptop.</p>
+  modal(`<h4>Audience voting link</h4><p>Share this with the audience before the show. When Roberta asks the audience, everyone votes from their phone and the results appear live on the big screen. Anyone can vote, no account needed. Live results only show when the game runs from ${SHOW_URL}, not inside Claude.</p>
     <div class="qrbox"><div class="qr" id="qr"></div><div class="votelink">${VOTE_URL}</div><button class="btn compact" id="copyVote"><span>Copy link</span></button></div>`, 'Close');
   drawQR($('qr')); $('copyVote').onclick = () => copyText(VOTE_URL, $('copyVote'));
 };
