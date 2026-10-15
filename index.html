@@ -54,7 +54,19 @@ if (!voter) { voter = Math.random().toString(36).slice(2) + Date.now().toString(
 let poll = null, mine = {}, busy = false, err = '';
 try { mine = JSON.parse(sessionStorage.getItem('wwtbm-mine') || '{}'); } catch (e) {}
 
-function setPoll(p) { if (!p || typeof p !== 'object') return; poll = p; err = ''; render(); }
+let lastRaw = '';
+function setPoll(p) { if (!p || typeof p !== 'object') return; const raw = JSON.stringify(p); if (raw === lastRaw) return; lastRaw = raw; poll = p; err = ''; render(); }
+/* Backup in case the live stream is paused (phone asleep, browser in background): re-check every 3 s. */
+async function refresh() {
+  try {
+    const r = await fetch(`https://ntfy.sh/${TOPIC}-poll/json?poll=1&since=latest`, { cache: 'no-store' });
+    const lines = (await r.text()).trim().split('\n').filter(Boolean);
+    if (lines.length) { const m = JSON.parse(lines[lines.length - 1]); if (m.event === 'message') setPoll(JSON.parse(m.message)); }
+    else if (!poll) render();
+  } catch (e) {}
+}
+setInterval(refresh, 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 function connect() {
   const es = new EventSource(`https://ntfy.sh/${TOPIC}-poll/sse?since=latest`);
   es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.event === 'message') setPoll(JSON.parse(m.message)); } catch (x) {} };
@@ -65,7 +77,7 @@ function render(msg) {
   const body = document.getElementById('body'); body.innerHTML = '';
   const wait = t => { const p = document.createElement('p'); p.className = 'wait'; p.textContent = t; body.appendChild(p); };
   if (msg) return wait(msg);
-  if (!poll || !poll.open || !Array.isArray(poll.opts)) return wait(poll && poll.pid ? 'Voting is closed. Eyes on the big screen!' : 'Waiting for the host to open the vote…');
+  if (!poll || !poll.open || !Array.isArray(poll.opts)) return wait('No vote open right now. Keep this page open: the question appears here as soon as Roberta asks the audience.');
   const q = document.createElement('p'); q.className = 'q'; q.textContent = String(poll.q || ''); body.appendChild(q);
   const grid = document.createElement('div'); grid.className = 'opts' + (poll.photo ? ' photos' : '');
   const removed = Array.isArray(poll.removed) ? poll.removed : [];
@@ -94,7 +106,7 @@ async function vote(i) {
   } catch (e) { err = 'Your vote did not go through. Tap again.'; }
   busy = false; render();
 }
-connect();
+connect(); refresh();
 </script>
 </body>
 </html>
