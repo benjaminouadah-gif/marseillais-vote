@@ -33,6 +33,9 @@ h1{margin:0;font-family:"Bungee",sans-serif;font-weight:400;font-size:20px;color
 .opt.mine{border-color:#ffd49a;background:linear-gradient(180deg,#ffa53a,#e06d00);color:#1d0f00}
 .opt.mine .L{color:#fff}
 .opt:disabled{opacity:.25}
+.opts.keys{grid-template-columns:1fr 1fr}
+.opt.key{justify-content:center;min-height:120px}
+.opt.key .L{font-size:56px}
 .status{font-weight:700;color:var(--om);min-height:26px;margin:0}
 .credit{color:var(--muted);font-size:12px;margin-top:20px}
 </style>
@@ -77,7 +80,7 @@ function render(msg) {
   const body = document.getElementById('body'); body.innerHTML = '';
   const wait = t => { const p = document.createElement('p'); p.className = 'wait'; p.textContent = t; body.appendChild(p); };
   if (msg) return wait(msg);
-  if (!poll || !poll.open || !Array.isArray(poll.opts)) return wait('No vote open right now. Keep this page open: the question appears here as soon as Roberta asks the audience.');
+  if (!poll || !poll.open || !Array.isArray(poll.opts)) return keypad(body);
   const q = document.createElement('p'); q.className = 'q'; q.textContent = String(poll.q || ''); body.appendChild(q);
   const grid = document.createElement('div'); grid.className = 'opts' + (poll.photo ? ' photos' : '');
   const removed = Array.isArray(poll.removed) ? poll.removed : [];
@@ -96,13 +99,29 @@ function render(msg) {
   st.textContent = err || (busy ? 'Sending…' : my !== undefined ? `You voted ${LET[my]}. You can change your vote until the vote closes.` : 'Tap your answer.');
   body.appendChild(st);
 }
+const FORM = 'https://docs.google.com/forms/d/e/1FAIpQLSeushvdbNCdy9RaYeARGR3-tSdDgGb5Rm2nyAnJxug9vDA80Q/formResponse';
+let keyMine = null;
+function keypad(body) {
+  const q = document.createElement('p'); q.className = 'q'; q.textContent = 'Look at the big screen and tap your answer.'; body.appendChild(q);
+  const grid = document.createElement('div'); grid.className = 'opts keys';
+  LET.forEach((l, i) => {
+    const b = document.createElement('button'); b.className = 'opt key' + (keyMine === i ? ' mine' : ''); b.disabled = busy;
+    const s2 = document.createElement('span'); s2.className = 'L'; s2.textContent = l; b.appendChild(s2);
+    b.onclick = () => vote(i); grid.appendChild(b);
+  });
+  body.appendChild(grid);
+  const st = document.createElement('p'); st.className = 'status';
+  st.textContent = err || (busy ? 'Sending…' : keyMine !== null ? `Vote sent: ${LET[keyMine]}. You can change it while the vote is open.` : 'Vote when Jean-Pierre opens the vote.');
+  body.appendChild(st);
+}
 async function vote(i) {
-  if (!poll || !poll.open || busy) return;
+  if (busy) return;
+  const open = poll && poll.open && Array.isArray(poll.opts);
   busy = true; err = ''; render();
   try {
-    const r = await fetch(`https://ntfy.sh/${TOPIC}-votes`, { method: 'POST', body: JSON.stringify({ pid: poll.pid, v: voter, c: i }) });
-    if (!r.ok) throw new Error(r.status);
-    mine[poll.pid] = i; try { sessionStorage.setItem('wwtbm-mine', JSON.stringify(mine)); } catch (e) {}
+    await fetch(FORM, { method: 'POST', mode: 'no-cors', body: new URLSearchParams({ 'entry.1785050074': voter, 'entry.2005847595': LET[i] }) });
+    if (open) { try { await fetch(`https://ntfy.sh/${TOPIC}-votes`, { method: 'POST', body: JSON.stringify({ pid: poll.pid, v: voter, c: i }) }); } catch (e) {} mine[poll.pid] = i; try { sessionStorage.setItem('wwtbm-mine', JSON.stringify(mine)); } catch (e) {} }
+    keyMine = i;
   } catch (e) { err = 'Your vote did not go through. Tap again.'; }
   busy = false; render();
 }

@@ -895,6 +895,7 @@ $('llCrowd').onclick = async () => {
   $('closeVote').onclick = closePoll;
   pollLive = [0, 0, 0, 0]; pollHands = [0, 0, 0, 0]; pollOpts = live;
   document.querySelectorAll('.hands button').forEach(b => b.onclick = () => { pollHands[Number(b.dataset.h)]++; SFX.click(); drawBars(); });
+  if (window.claude) { sheetPoll(live); return; }
   const pid = 'p' + Date.now(), since = Math.floor(Date.now() / 1000) - 2;
   const q = Q[S.qi];
   try {
@@ -916,6 +917,43 @@ $('llCrowd').onclick = async () => {
   pollUnsub = () => es.close();
 };
 let pollLive = [0, 0, 0, 0], pollHands = [0, 0, 0, 0], pollOpts = [0, 1, 2, 3];
+
+/* Inside Claude: phones submit a Google Form; the game reads its response sheet through the host's Google Sheets connector. */
+const SHEET_ID = '1Fx0sg3Yo5ehdIk6ipmJrnb2FAp_yTjUSpjRLPzsK0kk';
+const mcpReady = (async () => { if (!window.claude || !window.claude.use) return null; try { return await window.claude.use('mcp'); } catch (e) { return null; } })();
+let sheetT = null;
+const SHEET_FIX = {
+  needs_reauth: 'Reconnect Google Sheets in claude.ai Settings → Connectors, then try again.',
+  server_not_connected: 'Add the Google Sheets connector in claude.ai Settings → Connectors, then try again.',
+  selection_required: 'Choose which Google Sheets connection to use when Claude asks, then try again.',
+  not_in_manifest: 'Google Sheets is not allowed for this page. Allow it from the page\'s permissions, then try again.',
+  approval_required: 'Allow Google Sheets for this page when Claude asks, then try again.',
+  blocked_by_policy: 'Your organisation blocks Google Sheets here.'
+};
+function sheetRows(r) { const p = r && r.payload; return p && Array.isArray(p.values) ? p.values : []; }
+async function sheetPoll(live) {
+  const mcp = await mcpReady;
+  if (!mcp) { $('pollState').textContent = 'Phone voting is not available in this view. Count hands with the buttons below.'; return; }
+  const read = () => mcp.callTool('Google Sheets', 'get_values', { spreadsheetId: SHEET_ID, range: 'A:C' }, { cache: false });
+  let base;
+  try { base = sheetRows(await read()).length; }
+  catch (e) { $('pollState').textContent = (SHEET_FIX[e && e.code] || 'Could not reach the vote sheet right now.') + ' Meanwhile, count hands with the buttons below.'; return; }
+  if (!$('pollState')) return;
+  $('pollState').innerHTML = '<span class="live">LIVE</span> Voting is open. Scan the QR code and tap A, B, C or D.';
+  const ids = { A: 0, B: 1, C: 2, D: 3 };
+  let busy = false;
+  const tick = async () => {
+    if (busy) return; busy = true;
+    try {
+      const rows = sheetRows(await read()).slice(base), voters = {};
+      for (const row of rows) { const v = String(row[1] || ''), c = ids[String(row[2] || '').trim().toUpperCase()]; if (v && c !== undefined && live.includes(c)) voters[v] = c; }
+      const c = [0, 0, 0, 0]; for (const k in voters) c[voters[k]]++;
+      pollLive = c; drawBars();
+    } catch (e) { if (e && SHEET_FIX[e.code]) { clearInterval(sheetT); sheetT = null; if ($('pollState')) $('pollState').textContent = SHEET_FIX[e.code]; } }
+    busy = false;
+  };
+  clearInterval(sheetT); sheetT = setInterval(tick, 3000);
+}
 function drawBars() {
   const live = pollOpts, c = pollLive.map((n, i) => n + pollHands[i]);
   const tot = c.reduce((a, b) => a + b, 0);
@@ -927,6 +965,7 @@ function drawBars() {
   if ($('voteCount')) $('voteCount').textContent = tot === 1 ? '1 vote' : tot + ' votes';
 }
 async function closePoll() {
+  if (sheetT) { clearInterval(sheetT); sheetT = null; }
   if (pollUnsub) { pollUnsub(); pollUnsub = null; }
   if (pollPid) { const pid = pollPid; pollPid = null; try { await ntfyPost(TOPIC + '-poll', { pid, open: false }); } catch (e) {} }
   if ($('pollState')) $('pollState').textContent = 'Voting is closed.';
@@ -1002,7 +1041,7 @@ $('skipToBox').onclick = () => { ac(); show('sBox'); };
 $('skipToGift').onclick = () => { ac(); show('sGift'); };
 $('openSound').onclick = openSound; $('soundBtn').onclick = openSound;
 $('openVoteInfo').onclick = () => {
-  modal(`<h4>Audience voting link</h4><p>Share this with the audience before the show. When Roberta asks the audience, everyone votes from their phone and the results appear live on the big screen. Anyone can vote, no account needed. Live results only show when the game runs from ${SHOW_URL}, not inside Claude.</p>
+  modal(`<h4>Audience voting link</h4><p>Share this with the audience before the show. When Roberta asks the audience, everyone votes from their phone and the results appear live on the big screen. Anyone can vote, no account needed.</p>
     <div class="qrbox"><div class="qr" id="qr"></div><div class="votelink">${VOTE_URL}</div><button class="btn compact" id="copyVote"><span>Copy link</span></button></div>`, 'Close');
   drawQR($('qr')); $('copyVote').onclick = () => copyText(VOTE_URL, $('copyVote'));
 };
